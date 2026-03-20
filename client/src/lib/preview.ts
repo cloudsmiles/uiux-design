@@ -54,16 +54,39 @@ export function buildPreviewHtml(
 <body>
   <div id="root"><div id="loading">加载预览中...</div></div>
   <div id="error-overlay"></div>
-  <script src="https://cdn.tailwindcss.com"><\/script>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"><\/script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+  <script src="https://cdn.jsdelivr.net/npm/tailwindcss-cdn@3.4.10/tailwindcss.js"><\/script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/react/18.2.0/umd/react.production.min.js"><\/script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"><\/script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/babel-standalone/7.23.9/babel.min.js"><\/script>
   <script>
     function showError(msg) {
       var el = document.getElementById('error-overlay');
       el.textContent = msg;
       el.className = 'show';
     }
+    // 全局 stub：任何未定义的大写开头变量自动变成 SVG 占位组件
+    var _iconStub = function(props) {
+      return React.createElement('svg', {
+        width: (props && props.size) || 24, height: (props && props.size) || 24,
+        viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+        strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round',
+        className: (props && props.className) || '', style: props && props.style
+      });
+    };
+    // Proxy on window: 访问未定义的大写开头属性时返回 _iconStub
+    window.__origGet = Window.prototype.__lookupGetter__ ? undefined : undefined;
+    var _proxyHandler = {
+      get: function(target, prop, receiver) {
+        if (typeof prop === 'string' && prop.length > 0 && prop[0] >= 'A' && prop[0] <= 'Z' && !(prop in target)) {
+          return _iconStub;
+        }
+        return Reflect.get(target, prop, receiver);
+      }
+    };
+    try {
+      // 不能直接 proxy window，但可以用 with + Proxy 的方式
+      // 更简单的方案：编译后扫描未定义变量并注入
+    } catch(e) {}
     try {
       if (typeof React === 'undefined' || typeof ReactDOM === 'undefined') {
         showError('React 加载失败，请检查网络连接。');
@@ -75,6 +98,19 @@ export function buildPreviewHtml(
           presets: ['react', ['typescript', { allExtensions: true, isTSX: true }]],
           filename: 'component.tsx'
         }).code;
+        // 扫描编译后代码中引用的未定义大写变量，自动注入 stub
+        var _defined = new Set(Object.keys(window));
+        _defined.add('React'); _defined.add('ReactDOM'); _defined.add('Babel');
+        var _varMatch = output.match(/\\b([A-Z][A-Za-z0-9_]*)\\b/g);
+        if (_varMatch) {
+          var _seen = new Set();
+          _varMatch.forEach(function(v) {
+            if (!_seen.has(v) && !_defined.has(v)) {
+              _seen.add(v);
+              try { if (typeof window[v] === 'undefined') window[v] = _iconStub; } catch(e) {}
+            }
+          });
+        }
         var script = document.createElement('script');
         script.textContent = output;
         document.body.appendChild(script);
@@ -92,24 +128,9 @@ export function buildPreviewHtml(
 }
 
 function buildComponentScript(code: string): string {
-  // 提取 import 中的命名导入，用于生成 stub
-  const importedNames: string[] = [];
-  const importRegex = /^import\s+\{([^}]+)\}\s+from\s+['"][^'"]+['"];?\s*$/gm;
-  let m: RegExpExecArray | null;
-  while ((m = importRegex.exec(code)) !== null) {
-    m[1].split(',').forEach(s => {
-      const name = s.trim().split(/\s+as\s+/).pop()?.trim();
-      if (name) importedNames.push(name);
-    });
-  }
-  // 也提取 default import
-  const defaultImportRegex = /^import\s+(\w+)\s+from\s+['"][^'"]+['"];?\s*$/gm;
-  while ((m = defaultImportRegex.exec(code)) !== null) {
-    importedNames.push(m[1]);
-  }
-
+  // 删除所有 import 语句（支持多行）
   let processed = code
-    .replace(/^import\s+.*?from\s+['"][^'"]+['"];?\s*$/gm, '')
+    .replace(/^import\s+[\s\S]*?from\s+['"][^'"]+['"];?\s*$/gm, '')
     .replace(/^import\s+['"][^'"]+['"];?\s*$/gm, '');
 
   const exportMatch = processed.match(/export\s+default\s+function\s+(\w+)/);
@@ -120,36 +141,22 @@ function buildComponentScript(code: string): string {
     .replace(/export\s+default\s+/g, '')
     .replace(/export\s+/g, '');
 
-  // React hooks 和内置变量不需要 stub
-  const builtins = new Set([
-    'useState', 'useEffect', 'useRef', 'useMemo', 'useCallback', 'Fragment',
-    'createContext', 'useContext', 'useReducer', 'forwardRef', 'memo', 'lazy',
-    'Suspense', 'StrictMode', 'createRoot', 'createPortal', 'React', 'ReactDOM',
-    'cn', 'motion',
-  ]);
-  const stubs = importedNames
-    .filter(n => !builtins.has(n))
-    .map(n => `if (typeof ${n} === 'undefined') var ${n} = _iconStub;`)
-    .join('\n');
-
   const helpers = `
 const { useState, useEffect, useRef, useMemo, useCallback, Fragment, createContext, useContext, useReducer, forwardRef, memo, lazy, Suspense, StrictMode } = React;
 const { createRoot } = ReactDOM;
 const { createPortal } = ReactDOM;
 const cn = (...args) => args.filter(Boolean).join(' ');
 const motion = new Proxy({}, { get: (_, tag) => tag });
-// 兜底：任何未定义的变量（如 lucide 图标）渲染为空 SVG 占位
-const _iconStub = (props) => React.createElement('svg', { width: props?.size || 24, height: props?.size || 24, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className: props?.className || '', style: props?.style });
 `;
 
   if (componentName) {
-    return `${helpers}\n${stubs}\n${processed}\n\nReactDOM.createRoot(document.getElementById('root')).render(React.createElement(${componentName}));`;
+    return `${helpers}\n${processed}\n\nReactDOM.createRoot(document.getElementById('root')).render(React.createElement(${componentName}));`;
   }
 
   const funcMatch = processed.match(/function\s+([A-Z]\w+)\s*[\(<]/);
   if (funcMatch) {
-    return `${helpers}\n${stubs}\n${processed}\n\nReactDOM.createRoot(document.getElementById('root')).render(React.createElement(${funcMatch[1]}));`;
+    return `${helpers}\n${processed}\n\nReactDOM.createRoot(document.getElementById('root')).render(React.createElement(${funcMatch[1]}));`;
   }
 
-  return `${helpers}\n${stubs}\nfunction Preview() {\n  return React.createElement('div', {className: 'min-h-screen bg-zinc-100 flex items-center justify-center p-8'}, ${JSON.stringify(processed)});\n}\nReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Preview));`;
+  return `${helpers}\nfunction Preview() {\n  return React.createElement('div', {className: 'min-h-screen bg-zinc-100 flex items-center justify-center p-8'}, ${JSON.stringify(processed)});\n}\nReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Preview));`;
 }
