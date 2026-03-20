@@ -55,15 +55,59 @@ export function buildPreviewHtml(
   <div id="root"><div id="loading">加载预览中...</div></div>
   <div id="error-overlay"></div>
   <script src="https://s4.zstatic.net/npm/@tailwindcss/browser@4.2.2/dist/index.global.js"><\/script>
-  <script src="https://registry.npmmirror.com/react/18.2.0/files/umd/react.production.min.js"><\/script>
-  <script src="https://registry.npmmirror.com/react-dom/18.2.0/files/umd/react-dom.production.min.js"><\/script>
-  <script src="https://registry.npmmirror.com/@babel/standalone/7.23.9/files/babel.min.js"><\/script>
+  <script>
+    // CDN fallback 加载器
+    function loadScript(urls, cb) {
+      var i = 0;
+      function tryNext() {
+        if (i >= urls.length) { cb(new Error('All CDN sources failed')); return; }
+        var s = document.createElement('script');
+        s.src = urls[i];
+        s.onload = function() { cb(null); };
+        s.onerror = function() { i++; tryNext(); };
+        document.head.appendChild(s);
+      }
+      tryNext();
+    }
+    function loadAll(list, done) {
+      var idx = 0;
+      function next() {
+        if (idx >= list.length) { done(null); return; }
+        loadScript(list[idx], function(err) {
+          if (err) { done(err); return; }
+          idx++; next();
+        });
+      }
+      next();
+    }
+    loadAll([
+      [
+        'https://registry.npmmirror.com/react/18.2.0/files/umd/react.production.min.js',
+        'https://cdn.bootcdn.net/ajax/libs/react/18.2.0/umd/react.production.min.js',
+        'https://unpkg.com/react@18.2.0/umd/react.production.min.js'
+      ],
+      [
+        'https://registry.npmmirror.com/react-dom/18.2.0/files/umd/react-dom.production.min.js',
+        'https://cdn.bootcdn.net/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',
+        'https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js'
+      ],
+      [
+        'https://registry.npmmirror.com/@babel/standalone/7.23.9/files/babel.min.js',
+        'https://cdn.bootcdn.net/ajax/libs/babel-standalone/7.23.9/babel.min.js',
+        'https://unpkg.com/@babel/standalone@7.23.9/babel.min.js'
+      ]
+    ], function(err) {
+      if (err) { showError('依赖加载失败，请检查网络连接。'); return; }
+      runPreview();
+    });
+  <\/script>
   <script>
     function showError(msg) {
       var el = document.getElementById('error-overlay');
       el.textContent = msg;
       el.className = 'show';
     }
+    function runPreview() {
     try {
       if (typeof React === 'undefined' || typeof ReactDOM === 'undefined') {
         showError('React 加载失败，请检查网络连接。');
@@ -144,6 +188,7 @@ export function buildPreviewHtml(
     } catch(e) {
       showError('组件渲染错误:\\n' + e.message);
     }
+    } // end runPreview
   <\/script>
 </body>
 </html>`;
