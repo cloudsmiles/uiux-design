@@ -54,7 +54,7 @@ export function buildPreviewHtml(
 <body>
   <div id="root"><div id="loading">加载预览中...</div></div>
   <div id="error-overlay"></div>
-  <script src="https://unpkg.com/@tailwindcss/browser@4"><\/script>
+  <script src="https://s4.zstatic.net/npm/@tailwindcss/browser@4.2.2/dist/index.global.js"><\/script>
   <script src="https://registry.npmmirror.com/react/18.2.0/files/umd/react.production.min.js"><\/script>
   <script src="https://registry.npmmirror.com/react-dom/18.2.0/files/umd/react-dom.production.min.js"><\/script>
   <script src="https://registry.npmmirror.com/@babel/standalone/7.23.9/files/babel.min.js"><\/script>

@@ -76,7 +76,8 @@ export default function ComponentDetail() {
     capturedRef.current = true;
 
     try {
-      await new Promise(r => setTimeout(r, 2000));
+      // 等待更长时间，确保 Tailwind v4 异步样式生成完毕
+      await new Promise(r => setTimeout(r, 4000));
 
       const iframe = iframeRef.current;
       const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
