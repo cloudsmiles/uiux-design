@@ -1,11 +1,13 @@
-import 'dotenv/config';
-import express from 'express';
-import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import componentsRouter from './routes/components.js';
+import dotenv from 'dotenv';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+import express from 'express';
+import cors from 'cors';
+import componentsRouter from './routes/components.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,8 +22,8 @@ app.use('/api', componentsRouter);
 
 // 静态文件服务（生产环境）
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../../client/dist')));
-  app.get('*', (_req, res) => {
+  app.use('/design', express.static(path.join(__dirname, '../../client/dist')));
+  app.get('/design/*', (_req, res) => {
     res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
   });
 }
