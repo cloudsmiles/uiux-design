@@ -54,67 +54,52 @@ export function buildPreviewHtml(
 <body>
   <div id="root"><div id="loading">加载预览中...</div></div>
   <div id="error-overlay"></div>
-  <script src="https://cdn.jsdelivr.net/npm/tailwindcss-cdn@3.4.10/tailwindcss.js"><\/script>
-  <script src="https://cdn.bootcdn.net/ajax/libs/react/18.2.0/umd/react.production.min.js"><\/script>
-  <script src="https://cdn.bootcdn.net/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"><\/script>
-  <script src="https://cdn.bootcdn.net/ajax/libs/babel-standalone/7.23.9/babel.min.js"><\/script>
+  <link rel="stylesheet" href="https://registry.npmmirror.com/@unocss/reset/0.65.4/files/tailwind.min.css" />
+  <script src="https://registry.npmmirror.com/@unocss/runtime/0.65.4/files/uno.global.js"><\/script>
+  <script src="https://registry.npmmirror.com/react/18.2.0/files/umd/react.production.min.js"><\/script>
+  <script src="https://registry.npmmirror.com/react-dom/18.2.0/files/umd/react-dom.production.min.js"><\/script>
+  <script src="https://registry.npmmirror.com/@babel/standalone/7.23.9/files/babel.min.js"><\/script>
   <script>
     function showError(msg) {
       var el = document.getElementById('error-overlay');
       el.textContent = msg;
       el.className = 'show';
     }
-    // 全局 stub：任何未定义的大写开头变量自动变成 SVG 占位组件
-    var _iconStub = function(props) {
-      return React.createElement('svg', {
-        width: (props && props.size) || 24, height: (props && props.size) || 24,
-        viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
-        strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round',
-        className: (props && props.className) || '', style: props && props.style
-      });
-    };
-    // Proxy on window: 访问未定义的大写开头属性时返回 _iconStub
-    window.__origGet = Window.prototype.__lookupGetter__ ? undefined : undefined;
-    var _proxyHandler = {
-      get: function(target, prop, receiver) {
-        if (typeof prop === 'string' && prop.length > 0 && prop[0] >= 'A' && prop[0] <= 'Z' && !(prop in target)) {
-          return _iconStub;
-        }
-        return Reflect.get(target, prop, receiver);
-      }
-    };
-    try {
-      // 不能直接 proxy window，但可以用 with + Proxy 的方式
-      // 更简单的方案：编译后扫描未定义变量并注入
-    } catch(e) {}
     try {
       if (typeof React === 'undefined' || typeof ReactDOM === 'undefined') {
         showError('React 加载失败，请检查网络连接。');
       } else if (typeof Babel === 'undefined') {
         showError('Babel 加载失败，请检查网络连接。');
       } else {
+        var _stub = function(props) {
+          return React.createElement('svg', {
+            width: (props && props.size) || 24, height: (props && props.size) || 24,
+            viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+            strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round',
+            className: (props && props.className) || '', style: props && props.style
+          });
+        };
         var code = ${JSON.stringify(scriptCode)};
         var output = Babel.transform(code, {
           presets: ['react', ['typescript', { allExtensions: true, isTSX: true }]],
           filename: 'component.tsx'
         }).code;
-        // 扫描编译后代码中引用的未定义大写变量，自动注入 stub
-        var _defined = new Set(Object.keys(window));
-        _defined.add('React'); _defined.add('ReactDOM'); _defined.add('Babel');
-        var _varMatch = output.match(/\\b([A-Z][A-Za-z0-9_]*)\\b/g);
-        if (_varMatch) {
-          var _seen = new Set();
-          _varMatch.forEach(function(v) {
-            if (!_seen.has(v) && !_defined.has(v)) {
-              _seen.add(v);
-              try { if (typeof window[v] === 'undefined') window[v] = _iconStub; } catch(e) {}
-            }
-          });
+        // 扫描编译后代码中大写开头的标识符，为未定义的生成 var 声明
+        var _skip = {'React':1,'ReactDOM':1,'Babel':1,'Object':1,'Array':1,'String':1,'Number':1,'Boolean':1,'Date':1,'Math':1,'JSON':1,'Promise':1,'Error':1,'TypeError':1,'RangeError':1,'Map':1,'Set':1,'WeakMap':1,'WeakSet':1,'Symbol':1,'Proxy':1,'Reflect':1,'RegExp':1,'Int8Array':1,'Uint8Array':1,'Float32Array':1,'Float64Array':1,'ArrayBuffer':1,'DataView':1,'URL':1,'URLSearchParams':1,'FormData':1,'Headers':1,'Request':1,'Response':1,'Event':1,'CustomEvent':1,'Node':1,'Element':1,'HTMLElement':1,'Document':1,'Window':1,'Navigator':1,'Infinity':1,'NaN':1,'SVGElement':1};
+        var _matches = output.match(/\\b([A-Z][A-Za-z0-9_]*)\\b/g) || [];
+        var _seen = {};
+        var _stubs = '';
+        for (var i = 0; i < _matches.length; i++) {
+          var v = _matches[i];
+          if (!_seen[v] && !_skip[v]) {
+            _seen[v] = 1;
+            _stubs += 'var ' + v + ' = typeof ' + v + ' !== "undefined" ? ' + v + ' : _stub;\\n';
+          }
         }
         var script = document.createElement('script');
-        script.textContent = output;
+        script.textContent = 'var _stub = window._stub;\\n' + _stubs + output;
+        window._stub = _stub;
         document.body.appendChild(script);
-        // 通知父窗口渲染完成
         setTimeout(function() {
           window.parent.postMessage({ type: 'preview-rendered' }, '*');
         }, 500);
