@@ -41,10 +41,51 @@ async function getCategoryMap(): Promise<Map<string, number>> {
   return categoryMap;
 }
 
-async function resolveCategoryId(categoryName: string | undefined): Promise<number | null> {
-  if (!categoryName) return null;
+// 关键词 → 分类名映射，用于智能分类检测
+const categoryKeywords: [string, string[]][] = [
+  ['按钮', ['button', 'btn', '按钮', 'click', 'submit']],
+  ['表单', ['input', 'textarea', 'search', 'form', 'checkbox', 'radio', 'switch', 'select', 'picker', 'toggle', 'slider', 'range', 'field', '输入', '搜索', '表单']],
+  ['展示', ['card', 'table', 'list', 'tree', 'badge', 'tag', 'chip', 'label', 'avatar', 'icon', 'chart', 'graph', 'statistic', 'timeline', 'step', '卡片', '表格', '列表', '标签', '头像', '图标', '图表', '时间线', '步骤']],
+  ['反馈', ['toast', 'alert', 'notification', 'message', 'modal', 'dialog', 'drawer', 'popup', 'overlay', 'tooltip', 'loading', 'spinner', 'skeleton', 'loader', 'progress', '提示', '通知', '弹窗', '加载']],
+  ['导航', ['nav', 'menu', 'sidebar', 'breadcrumb', 'tab', 'header', 'footer', '导航', '菜单']],
+  ['布局', ['layout', 'grid', 'flex', 'container', 'divider', 'section', '布局']],
+  ['动效', ['animation', 'animate', 'transition', 'motion', 'effect', 'particle', 'canvas', '动画', '动效']],
+];
+
+/**
+ * 根据组件名称、代码内容、描述智能检测分类
+ */
+async function detectCategory(name: string, code: string, description?: string): Promise<number | null> {
   const map = await getCategoryMap();
-  return map.get(categoryName) || null;
+  const text = `${name} ${description || ''} ${code}`.toLowerCase();
+
+  // 按匹配关键词数量排序，取最佳匹配
+  let bestMatch: string | null = null;
+  let bestScore = 0;
+
+  for (const [category, keywords] of categoryKeywords) {
+    let score = 0;
+    for (const kw of keywords) {
+      // 名称匹配权重更高
+      if (name.toLowerCase().includes(kw)) score += 3;
+      // 描述匹配
+      if (description?.toLowerCase().includes(kw)) score += 2;
+      // 代码匹配
+      if (text.includes(kw)) score += 1;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = category;
+    }
+  }
+
+  // 至少要有 1 分才算匹配到
+  if (bestMatch && bestScore >= 1) {
+    return map.get(bestMatch) || null;
+  }
+
+  // 兜底：归到"其他"
+  return map.get('其他') || null;
 }
 
 // 获取分类列表
@@ -76,7 +117,7 @@ router.get('/components', async (req: Request, res: Response) => {
 });
 
 // 获取单个组件
-router.get('/components/:id', async (req: Request, res: Response) => {
+router.get('/components/:id', async (req: Request<{ id: string }>, res: Response) => {
   try {
     const component = await componentService.getComponentById(req.params.id);
     if (!component) {
@@ -99,9 +140,12 @@ router.post('/components', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: '名称和代码不能为空' });
     }
 
+    // 如果没有指定分类，智能检测
+    const finalCategoryId = category_id || await detectCategory(name, code, description);
+
     const id = await componentService.createComponent({
       name,
-      category_id,
+      category_id: finalCategoryId,
       description,
       code,
       dependencies,
@@ -134,18 +178,19 @@ router.post('/components/upload', upload.single('file'), async (req: Request, re
       });
     }
 
-    // 解析分类 ID
-    const categories = await componentService.getCategories();
-    const categoryMap = new Map(categories.map(c => [c.name, c.id]));
-
-    // 为组件添加分类 ID
-    const componentsWithCategory = result.components.map(comp => {
+    // 为组件智能匹配分类
+    const componentsWithCategory = await Promise.all(result.components.map(async comp => {
       const tags = comp.tags || [];
-      // 从 tags 中查找分类名
-      const categoryName = tags.find(t => categoryMap.has(t));
-      const category_id = categoryName ? categoryMap.get(categoryName) || null : null;
+      const map = await getCategoryMap();
+      // 先从 tags 中查找分类名
+      const categoryName = tags.find(t => map.has(t));
+      let category_id = categoryName ? map.get(categoryName) || null : null;
+      // 如果 tags 没匹配到，用智能检测
+      if (!category_id) {
+        category_id = await detectCategory(comp.name, comp.code, comp.description);
+      }
       return { ...comp, category_id };
-    });
+    }));
 
     // 批量创建组件
     const ids = await componentService.createComponentsBatch(componentsWithCategory);
@@ -167,7 +212,7 @@ router.post('/components/upload', upload.single('file'), async (req: Request, re
 });
 
 // 更新组件
-router.put('/components/:id', async (req: Request, res: Response) => {
+router.put('/components/:id', async (req: Request<{ id: string }>, res: Response) => {
   try {
     const updated = await componentService.updateComponent(req.params.id, req.body);
     if (!updated) {
@@ -180,8 +225,23 @@ router.put('/components/:id', async (req: Request, res: Response) => {
   }
 });
 
+// 保存预览截图
+router.put('/components/:id/preview', async (req: Request<{ id: string }>, res: Response) => {
+  try {
+    const { preview_image } = req.body;
+    if (!preview_image) {
+      return res.status(400).json({ success: false, message: '缺少预览图数据' });
+    }
+    await componentService.updateComponent(req.params.id, { preview_image });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('保存预览图失败:', error);
+    res.status(500).json({ success: false, message: '保存预览图失败' });
+  }
+});
+
 // 删除组件
-router.delete('/components/:id', async (req: Request, res: Response) => {
+router.delete('/components/:id', async (req: Request<{ id: string }>, res: Response) => {
   try {
     const deleted = await componentService.deleteComponent(req.params.id);
     if (!deleted) {

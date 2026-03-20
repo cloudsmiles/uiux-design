@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, Eye } from 'lucide-react';
+import { Search, Filter, Eye, Play } from 'lucide-react';
 import { api, type Category, type Component } from '../lib/api';
+import { buildPreviewHtml } from '../lib/preview';
 import { cn } from '../lib/utils';
 
 export default function Gallery() {
@@ -61,7 +62,7 @@ export default function Gallery() {
             placeholder="搜索组件..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 bg-white border border-zinc-200 focus:ring-2 focus:ring-indigo-500 rounded-xl text-sm transition-all"
+            className="w-full pl-10 pr-4 py-3 bg-white border border-zinc-200 rounded-xl text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
           />
         </div>
       </div>
@@ -105,7 +106,7 @@ export default function Gallery() {
             placeholder="搜索组件..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-white border border-zinc-200 focus:ring-2 focus:ring-indigo-500 rounded-full text-sm transition-all"
+            className="w-full pl-10 pr-4 py-2 bg-white border border-zinc-200 rounded-full text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
           />
         </div>
       </div>
@@ -114,57 +115,7 @@ export default function Gallery() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         <AnimatePresence mode="popLayout">
           {filteredComponents.map((component) => (
-            <motion.div
-              layout
-              key={component.id}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              whileHover={{ y: -4 }}
-              className="group relative bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300"
-            >
-              {/* Preview Area */}
-              <div className="aspect-square bg-zinc-50 flex items-center justify-center p-8 relative overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] opacity-50" />
-                <div className="relative z-10 text-center">
-                  <div className="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                    <span className="text-2xl font-bold text-indigo-600">
-                      {component.name.charAt(0)}
-                    </span>
-                  </div>
-                  <p className="text-xs text-zinc-400">点击查看预览</p>
-                </div>
-
-                {/* Overlay Actions */}
-                <Link
-                  to={`/component/${component.id}`}
-                  className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20"
-                >
-                  <div className="p-3 bg-white rounded-full text-zinc-900 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
-                    <Eye className="w-5 h-5" />
-                  </div>
-                </Link>
-              </div>
-
-              {/* Info Area */}
-              <Link to={`/component/${component.id}`} className="block p-4 border-t border-zinc-100 bg-white">
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className="font-semibold text-zinc-900">{component.name}</h3>
-                  {component.category_name && (
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
-                      {component.category_name}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-zinc-500 line-clamp-1">{component.description || '暂无描述'}</p>
-                <div className="flex items-center space-x-3 mt-2 text-xs text-zinc-400">
-                  <span className="flex items-center space-x-1">
-                    <Eye className="w-3 h-3" />
-                    <span>{component.view_count}</span>
-                  </span>
-                </div>
-              </Link>
-            </motion.div>
+            <ComponentCard key={component.id} component={component} />
           ))}
         </AnimatePresence>
       </div>
@@ -183,5 +134,99 @@ export default function Gallery() {
         </div>
       )}
     </div>
+  );
+}
+
+/** 组件卡片 — 有截图直接展示，没有才 hover 加载 iframe */
+function ComponentCard({ component }: { component: Component }) {
+  const hasPreview = !!component.preview_image;
+  const [hovered, setHovered] = useState(false);
+
+  // 只有没截图的组件才在 hover 时构建预览
+  const previewHtml = useMemo(() => {
+    if (hasPreview || !hovered) return '';
+    return buildPreviewHtml(component.code, component.files);
+  }, [hasPreview, hovered, component.code, component.files]);
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      whileHover={{ y: -4 }}
+      onMouseEnter={() => !hasPreview && setHovered(true)}
+      onMouseLeave={() => !hasPreview && setHovered(false)}
+      className="group relative bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300"
+    >
+      {/* Preview Area */}
+      <div className="aspect-[4/3] bg-zinc-50 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] opacity-50" />
+
+        {/* 有截图 — 始终显示静态图 */}
+        {hasPreview && (
+          <img
+            src={component.preview_image!}
+            alt={component.name}
+            className="absolute inset-0 w-full h-full object-cover object-top z-10"
+            loading="lazy"
+          />
+        )}
+
+        {/* 没截图 + 未 hover — 占位 */}
+        {!hasPreview && !hovered && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-xl font-bold shadow-lg">
+              {component.name.charAt(0)}
+            </div>
+            <span className="text-xs text-zinc-400 flex items-center gap-1">
+              <Play className="w-3 h-3" /> 悬停预览
+            </span>
+          </div>
+        )}
+
+        {/* 没截图 + hover — 加载 iframe */}
+        {!hasPreview && hovered && previewHtml && (
+          <div className="absolute inset-0 z-10 overflow-hidden">
+            <iframe
+              srcDoc={previewHtml}
+              title="预览"
+              sandbox="allow-scripts allow-same-origin"
+              className="w-[300%] h-[300%] origin-top-left border-0 pointer-events-none"
+              style={{ transform: 'scale(0.3333)' }}
+            />
+          </div>
+        )}
+
+        {/* Overlay Actions */}
+        <Link
+          to={`/component/${component.id}`}
+          className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20"
+        >
+          <div className="p-3 bg-white rounded-full text-zinc-900 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
+            <Eye className="w-5 h-5" />
+          </div>
+        </Link>
+      </div>
+
+      {/* Info Area */}
+      <Link to={`/component/${component.id}`} className="block p-4 border-t border-zinc-100 bg-white">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-semibold text-zinc-900 truncate">{component.name}</h3>
+          {component.category_name && (
+            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded shrink-0 ml-2">
+              {component.category_name}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-zinc-500 line-clamp-1">{component.description || '暂无描述'}</p>
+        <div className="flex items-center space-x-3 mt-2 text-xs text-zinc-400">
+          <span className="flex items-center space-x-1">
+            <Eye className="w-3 h-3" />
+            <span>{component.view_count}</span>
+          </span>
+        </div>
+      </Link>
+    </motion.div>
   );
 }

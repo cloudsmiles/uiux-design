@@ -53,34 +53,32 @@ export function parseZipFile(zipPath: string): ParsedZipResult {
 
   if (isAIStudio) {
     // AI Studio 项目解析流程
-    // 1. 优先从 src/data/components.tsx 提取
+    // 1. 优先从 src/data/components.tsx 提取（多组件集合格式）
     const componentsFile = findFile(files, 'src/data/components.');
     if (componentsFile) {
       components = parseAIStudioComponents(componentsFile);
     }
 
-    // 2. 如果没有找到组件，从 App.tsx 提取内联的 COMPONENTS 数组
+    // 2. 如果没有 components.tsx，检查是否为单文件项目（App.tsx 引用其他文件）
     if (components.length === 0 && files.has('src/App.tsx')) {
-      const appContent = files.get('src/App.tsx')!;
-      components = parseAppTsx(appContent);
+      // 提取所有源文件作为多文件组件
+      const sourceFiles = extractSourceFiles(files);
+
+      components.push({
+        name: projectName,
+        description: projectDescription,
+        code: files.get('src/App.tsx')!,
+        files: sourceFiles,
+        tags: ['AI Studio'],
+      });
     }
 
     // 3. 为组件添加项目信息
     components = components.map(comp => ({
       ...comp,
       description: comp.description || projectDescription,
-      tags: [...(comp.tags || []), 'AI Studio'],
+      tags: [...new Set([...(comp.tags || []), 'AI Studio'])],
     }));
-
-    // 4. 如果还是没有组件，把整个 App.tsx 作为一个组件
-    if (components.length === 0 && files.has('src/App.tsx')) {
-      components.push({
-        name: projectName,
-        description: projectDescription,
-        code: files.get('src/App.tsx')!,
-        tags: ['AI Studio'],
-      });
-    }
   } else {
     // 普通组件包 - 查找主要组件文件
     const mainComponent = findMainComponent(files);
@@ -96,6 +94,28 @@ export function parseZipFile(zipPath: string): ParsedZipResult {
     dependencies,
     rawFiles: files,
   };
+}
+
+/**
+ * 提取所有源文件（用于多文件项目）
+ */
+function extractSourceFiles(files: Map<string, string>): Record<string, string> {
+  const sourceFiles: Record<string, string> = {};
+  const sourceExtensions = ['.tsx', '.ts', '.jsx', '.js', '.css'];
+
+  for (const [path, content] of files) {
+    // 只提取 src/ 目录下的源文件
+    if (path.startsWith('src/')) {
+      const ext = path.substring(path.lastIndexOf('.'));
+      if (sourceExtensions.includes(ext)) {
+        // 转换路径：src/components/Button.tsx -> /components/Button.tsx
+        const relativePath = '/' + path.replace('src/', '');
+        sourceFiles[relativePath] = content;
+      }
+    }
+  }
+
+  return sourceFiles;
 }
 
 /**
@@ -276,9 +296,26 @@ function parseComponentBlock(block: string): CreateComponentInput | null {
     const descMatch = block.match(/description:\s*['"`]([^'"`]+)['"`]/);
     const description = descMatch ? descMatch[1] : '';
 
-    // 提取 code (模板字符串)
-    const codeMatch = block.match(/code:\s*`([\s\S]*?)`/);
+    // 提取 code (支持模板字符串和普通字符串)
+    // 优先匹配模板字符串 `...`
+    let codeMatch = block.match(/code:\s*`([\s\S]*?)`/);
     let code = codeMatch ? codeMatch[1] : '';
+
+    // 如果没有找到模板字符串，尝试匹配普通字符串 "..." 或 '...'
+    if (!code) {
+      // 匹配 code: "..." 格式，需要处理转义引号和换行符
+      const doubleQuoteMatch = block.match(/code:\s*"((?:[^"\\]|\\.)*)"/);
+      if (doubleQuoteMatch) {
+        // 解码转义字符
+        code = decodeEscapedString(doubleQuoteMatch[1]);
+      } else {
+        // 尝试单引号
+        const singleQuoteMatch = block.match(/code:\s*'((?:[^'\\]|\\.)*)'/);
+        if (singleQuoteMatch) {
+          code = decodeEscapedString(singleQuoteMatch[1]);
+        }
+      }
+    }
 
     // 清理代码缩进
     code = cleanCodeIndent(code);
@@ -409,6 +446,19 @@ function extractComponentName(content: string): string | null {
   // 匹配 export default function ComponentName
   const match = content.match(/export\s+default\s+function\s+(\w+)/);
   return match ? match[1] : null;
+}
+
+/**
+ * 解码字符串中的转义字符
+ */
+function decodeEscapedString(str: string): string {
+  return str
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\"/g, '"')
+    .replace(/\\'/g, "'")
+    .replace(/\\\\/g, '\\');
 }
 
 /**

@@ -5,6 +5,7 @@ export interface Component {
   category_name?: string;
   description: string | null;
   code: string;
+  files: Record<string, string> | null;  // 多文件支持
   dependencies: Record<string, string> | null;
   preview_image: string | null;
   tags: string[] | null;
@@ -26,8 +27,10 @@ export interface CreateComponentInput {
   category_id?: number | null;
   description?: string;
   code: string;
+  files?: Record<string, string>;  // 多文件支持
   dependencies?: Record<string, string>;
   tags?: string[];
+  preview_image?: string | null;
 }
 
 // AI Studio 组件结构

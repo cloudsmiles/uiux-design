@@ -39,8 +39,9 @@ async function initDatabase() {
       category_id INT,
       description TEXT,
       code LONGTEXT NOT NULL,
+      files JSON,
       dependencies JSON,
-      preview_image VARCHAR(255),
+      preview_image LONGTEXT,
       tags JSON,
       view_count INT DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -50,16 +51,32 @@ async function initDatabase() {
   `);
   console.log('Table "components" created or already exists');
 
+  // 如果表已存在，检查并添加 files 字段
+  try {
+    await connection.query(`ALTER TABLE components ADD COLUMN files JSON AFTER code`);
+    console.log('Added "files" column to components table');
+  } catch {
+    // 字段已存在，忽略错误
+  }
+
+  // 将 preview_image 字段改为 LONGTEXT 以存储 base64 截图
+  try {
+    await connection.query(`ALTER TABLE components MODIFY COLUMN preview_image LONGTEXT`);
+    console.log('Updated "preview_image" column to LONGTEXT');
+  } catch {
+    // 忽略错误
+  }
+
   // 插入默认分类
   const defaultCategories = [
     { name: '按钮', icon: 'MousePointer', sort_order: 1 },
-    { name: '卡片', icon: 'Square', sort_order: 2 },
-    { name: '输入框', icon: 'Type', sort_order: 3 },
-    { name: '加载器', icon: 'Loader', sort_order: 4 },
+    { name: '表单', icon: 'ClipboardList', sort_order: 2 },
+    { name: '展示', icon: 'Table', sort_order: 3 },
+    { name: '反馈', icon: 'MessageCircle', sort_order: 4 },
     { name: '导航', icon: 'Navigation', sort_order: 5 },
-    { name: '反馈', icon: 'MessageCircle', sort_order: 6 },
-    { name: '布局', icon: 'Layout', sort_order: 7 },
-    { name: '数据展示', icon: 'Table', sort_order: 8 },
+    { name: '布局', icon: 'Layout', sort_order: 6 },
+    { name: '动效', icon: 'Zap', sort_order: 7 },
+    { name: '其他', icon: 'Package', sort_order: 99 },
   ];
 
   for (const cat of defaultCategories) {

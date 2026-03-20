@@ -20,7 +20,9 @@ export async function getComponents(options: {
   offset?: number;
 }): Promise<{ components: Component[]; total: number }> {
   let query = `
-    SELECT c.*, cat.name as category_name
+    SELECT c.id, c.name, c.category_id, c.description, c.code, c.files,
+           c.dependencies, c.preview_image, c.tags, c.view_count,
+           c.created_at, c.updated_at, cat.name as category_name
     FROM components c
     LEFT JOIN categories cat ON c.category_id = cat.id
     WHERE 1=1
@@ -73,14 +75,15 @@ export async function getComponentById(id: string): Promise<Component | null> {
 export async function createComponent(input: CreateComponentInput): Promise<string> {
   const id = uuidv4();
   await pool.query(
-    `INSERT INTO components (id, name, category_id, description, code, dependencies, tags)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO components (id, name, category_id, description, code, files, dependencies, tags)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.name,
       input.category_id || null,
       input.description || null,
       input.code,
+      JSON.stringify(input.files || {}),
       JSON.stringify(input.dependencies || {}),
       JSON.stringify(input.tags || []),
     ]
@@ -100,14 +103,15 @@ export async function createComponentsBatch(inputs: CreateComponentInput[]): Pro
     for (const input of inputs) {
       const id = uuidv4();
       await conn.query(
-        `INSERT INTO components (id, name, category_id, description, code, dependencies, tags)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO components (id, name, category_id, description, code, files, dependencies, tags)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           input.name,
           input.category_id || null,
           input.description || null,
           input.code,
+          JSON.stringify(input.files || {}),
           JSON.stringify(input.dependencies || {}),
           JSON.stringify(input.tags || []),
         ]
@@ -149,6 +153,10 @@ export async function updateComponent(
     fields.push('code = ?');
     values.push(input.code);
   }
+  if (input.files !== undefined) {
+    fields.push('files = ?');
+    values.push(JSON.stringify(input.files));
+  }
   if (input.dependencies !== undefined) {
     fields.push('dependencies = ?');
     values.push(JSON.stringify(input.dependencies));
@@ -156,6 +164,10 @@ export async function updateComponent(
   if (input.tags !== undefined) {
     fields.push('tags = ?');
     values.push(JSON.stringify(input.tags));
+  }
+  if (input.preview_image !== undefined) {
+    fields.push('preview_image = ?');
+    values.push(input.preview_image);
   }
 
   if (fields.length === 0) return false;

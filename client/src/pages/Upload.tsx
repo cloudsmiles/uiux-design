@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Upload, Code, FileArchive, Check, Sparkles } from 'lucide-react';
+import { ArrowLeft, Upload, Code, FileArchive, Check, Sparkles, ChevronDown } from 'lucide-react';
 import { api, type Category, type UploadResult } from '../lib/api';
 import { cn } from '../lib/utils';
 
@@ -110,9 +110,9 @@ export default function UploadPage() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-2xl border border-zinc-200 overflow-hidden shadow-sm"
+        className="bg-white rounded-2xl border border-zinc-200 shadow-sm"
       >
-        <div className="px-6 py-4 border-b border-zinc-100">
+        <div className="px-6 py-4 border-b border-zinc-100 rounded-t-2xl">
           <h1 className="text-xl font-bold text-zinc-900">上传组件</h1>
           <p className="text-sm text-zinc-500 mt-1">支持 AI Studio 项目和普通组件包</p>
         </div>
@@ -214,7 +214,8 @@ export default function UploadPage() {
           )}
         </AnimatePresence>
 
-        {/* Form */}
+        {/* Form — 上传成功后隐藏 */}
+        {!result && (
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {mode === 'zip' ? (
             <>
@@ -273,7 +274,7 @@ export default function UploadPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="例如：闪亮按钮"
-                  className="w-full px-4 py-2 border border-zinc-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  className="w-full px-4 py-2 border border-zinc-200 rounded-lg text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                   required
                 />
               </div>
@@ -288,7 +289,7 @@ export default function UploadPage() {
                   onChange={(e) => setCode(e.target.value)}
                   placeholder={`粘贴你的 React 组件代码...\n\n例如：\n<button className="px-4 py-2 bg-indigo-600 text-white rounded-lg">\n  点击我\n</button>`}
                   rows={12}
-                  className="w-full px-4 py-3 border border-zinc-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all font-mono text-sm resize-none"
+                  className="w-full px-4 py-3 border border-zinc-200 rounded-lg text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm resize-none transition-all"
                   required
                 />
               </div>
@@ -298,18 +299,11 @@ export default function UploadPage() {
           {/* Category (optional) */}
           <div>
             <label className="block text-sm font-medium text-zinc-700 mb-1">分类（可选）</label>
-            <select
-              value={categoryId || ''}
-              onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : undefined)}
-              className="w-full px-4 py-2 border border-zinc-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-            >
-              <option value="">自动识别或选择分类</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
+            <CategorySelect
+              categories={categories}
+              value={categoryId}
+              onChange={setCategoryId}
+            />
           </div>
 
           {/* Submit */}
@@ -329,7 +323,102 @@ export default function UploadPage() {
             </button>
           </div>
         </form>
+        )}
+
+        {/* 上传成功后显示"继续上传"按钮 */}
+        {result && (
+          <div className="p-6 flex justify-center">
+            <button
+              onClick={() => { setResult(null); resetForm(); }}
+              className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+            >
+              继续上传
+            </button>
+          </div>
+        )}
       </motion.div>
+    </div>
+  );
+}
+
+/** 自定义分类下拉选择 */
+function CategorySelect({
+  categories,
+  value,
+  onChange,
+}: {
+  categories: Category[];
+  value: number | undefined;
+  onChange: (v: number | undefined) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = categories.find((c) => c.id === value);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          'w-full flex items-center justify-between px-4 py-2 border rounded-lg bg-white text-sm transition-all cursor-pointer',
+          open
+            ? 'border-indigo-500 ring-1 ring-indigo-500'
+            : 'border-zinc-200 hover:border-zinc-300',
+        )}
+      >
+        <span className={selected ? 'text-zinc-900' : 'text-zinc-400'}>
+          {selected ? selected.name : '自动识别或选择分类'}
+        </span>
+        <ChevronDown className={cn('w-4 h-4 text-zinc-400 transition-transform', open && 'rotate-180')} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.ul
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15 }}
+            className="absolute z-50 mt-1 w-full bg-white border border-zinc-200 rounded-lg shadow-lg py-1 max-h-60 overflow-auto"
+          >
+            <li>
+              <button
+                type="button"
+                onClick={() => { onChange(undefined); setOpen(false); }}
+                className={cn(
+                  'w-full text-left px-4 py-2 text-sm transition-colors',
+                  !value ? 'bg-indigo-50 text-indigo-700' : 'text-zinc-600 hover:bg-zinc-50',
+                )}
+              >
+                自动识别
+              </button>
+            </li>
+            {categories.map((cat) => (
+              <li key={cat.id}>
+                <button
+                  type="button"
+                  onClick={() => { onChange(cat.id); setOpen(false); }}
+                  className={cn(
+                    'w-full text-left px-4 py-2 text-sm transition-colors',
+                    value === cat.id ? 'bg-indigo-50 text-indigo-700' : 'text-zinc-700 hover:bg-zinc-50',
+                  )}
+                >
+                  {cat.name}
+                </button>
+              </li>
+            ))}
+          </motion.ul>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

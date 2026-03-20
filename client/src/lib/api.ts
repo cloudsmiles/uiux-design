@@ -33,6 +33,7 @@ export interface Component {
   category_name: string | null;
   description: string | null;
   code: string;
+  files: Record<string, string> | null;  // 多文件支持
   dependencies: Record<string, string> | null;
   preview_image: string | null;
   tags: string[] | null;
@@ -106,4 +107,10 @@ export const api = {
 
   deleteComponent: (id: string) =>
     request<void>(`/components/${id}`, { method: 'DELETE' }),
+
+  savePreviewImage: (id: string, preview_image: string) =>
+    request<void>(`/components/${id}/preview`, {
+      method: 'PUT',
+      body: JSON.stringify({ preview_image }),
+    }),
 };
