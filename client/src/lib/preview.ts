@@ -109,6 +109,37 @@ export function buildPreviewHtml(
         setTimeout(function() {
           window.parent.postMessage({ type: 'preview-rendered' }, '*');
         }, 800);
+        // 监听父窗口的截图请求
+        window.addEventListener('message', function(e) {
+          if (e.data && e.data.type === 'capture-request') {
+            setTimeout(function() {
+              try {
+                var root = document.getElementById('root');
+                if (!root) return;
+                var rect = root.getBoundingClientRect();
+                var w = Math.min(rect.width || document.documentElement.scrollWidth, 1200);
+                var h = Math.min(rect.height || document.documentElement.scrollHeight, 800);
+                var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
+                  '<foreignObject width="100%" height="100%">' +
+                  new XMLSerializer().serializeToString(document.documentElement) +
+                  '</foreignObject></svg>';
+                var img = new Image();
+                img.onload = function() {
+                  var canvas = document.createElement('canvas');
+                  canvas.width = w * 2;
+                  canvas.height = h * 2;
+                  var ctx = canvas.getContext('2d');
+                  ctx.scale(2, 2);
+                  ctx.drawImage(img, 0, 0);
+                  var dataUrl = canvas.toDataURL('image/webp', 0.85);
+                  window.parent.postMessage({ type: 'preview-capture', dataUrl: dataUrl }, '*');
+                };
+                img.onerror = function() {};
+                img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+              } catch(err) { console.warn('Capture error:', err); }
+            }, 1000);
+          }
+        });
       }
     } catch(e) {
       showError('组件渲染错误:\\n' + e.message);

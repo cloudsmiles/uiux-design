@@ -191,7 +191,7 @@ function ComponentCard({ component }: { component: Component }) {
             <iframe
               srcDoc={previewHtml}
               title="预览"
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-scripts"
               className="w-[300%] h-[300%] origin-top-left border-0 pointer-events-none"
               style={{ transform: 'scale(0.3333)' }}
             />

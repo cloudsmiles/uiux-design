@@ -7,7 +7,6 @@ import typescript from 'highlight.js/lib/languages/typescript';
 import xml from 'highlight.js/lib/languages/xml';
 import css from 'highlight.js/lib/languages/css';
 import 'highlight.js/styles/github-dark.css';
-import html2canvas from 'html2canvas';
 import { api, type Component } from '../lib/api';
 import { cn } from '../lib/utils';
 import { buildPreviewHtml } from '../lib/preview';
@@ -69,31 +68,12 @@ export default function ComponentDetail() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const capturedRef = useRef(false);
 
-  // 监听 iframe 渲染完成，用 html2canvas 截图并保存
-  const handlePreviewCapture = useCallback(async () => {
+  // 监听 iframe 发来的截图数据并保存
+  const handlePreviewCapture = useCallback(async (dataUrl: string) => {
     if (!component || component.preview_image || capturedRef.current) return;
-    if (!iframeRef.current) return;
     capturedRef.current = true;
-
     try {
-      // 等待更长时间，确保 Tailwind v4 异步样式生成完毕
-      await new Promise(r => setTimeout(r, 4000));
-
-      const iframe = iframeRef.current;
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!iframeDoc?.body) return;
-
-      const canvas = await html2canvas(iframeDoc.body, {
-        useCORS: true,
-        scale: 2,
-        backgroundColor: '#ffffff',
-        width: iframeDoc.documentElement.scrollWidth,
-        height: Math.min(iframeDoc.documentElement.scrollHeight, 800),
-        logging: false,
-      });
-
-      const dataUrl = canvas.toDataURL('image/webp', 0.9);
-      if (dataUrl.length < 3_000_000 && component) {
+      if (dataUrl.length < 3_000_000) {
         await api.savePreviewImage(component.id, dataUrl).catch(() => {});
       }
     } catch (e) {
@@ -105,7 +85,15 @@ export default function ComponentDetail() {
     if (!component) return;
     function handleMessage(e: MessageEvent) {
       if (e.data?.type === 'preview-rendered') {
-        if (!component?.preview_image) handlePreviewCapture();
+        // 触发 iframe 内部截图
+        if (!component?.preview_image && !capturedRef.current && iframeRef.current) {
+          try {
+            iframeRef.current.contentWindow?.postMessage({ type: 'capture-request' }, '*');
+          } catch { /* ignore */ }
+        }
+      }
+      if (e.data?.type === 'preview-capture' && e.data.dataUrl) {
+        handlePreviewCapture(e.data.dataUrl);
       }
     }
     window.addEventListener('message', handleMessage);
@@ -208,7 +196,7 @@ export default function ComponentDetail() {
               'w-full border-0',
               layout === 'side' ? 'flex-1 min-h-[500px]' : 'h-[500px]'
             )}
-            sandbox="allow-scripts allow-same-origin"
+            sandbox="allow-scripts"
           />
         </motion.div>
 
