@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Copy, Check, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, Check, Trash2, Columns, Rows } from 'lucide-react';
 import hljs from 'highlight.js/lib/core';
 import typescript from 'highlight.js/lib/languages/typescript';
 import xml from 'highlight.js/lib/languages/xml';
@@ -21,6 +21,15 @@ export default function ComponentDetail() {
   const navigate = useNavigate();
   const [component, setComponent] = useState<Component | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [layout, setLayout] = useState<'side' | 'stack'>(() => {
+    return (localStorage.getItem('detail-layout') as 'side' | 'stack') || 'side';
+  });
+
+  function toggleLayout() {
+    const next = layout === 'side' ? 'stack' : 'side';
+    setLayout(next);
+    localStorage.setItem('detail-layout', next);
+  }
 
   useEffect(() => {
     if (id) loadComponent(id);
@@ -92,10 +101,10 @@ export default function ComponentDetail() {
   }, [component]);
 
   useEffect(() => {
-    if (!component || component.preview_image) return;
+    if (!component) return;
     function handleMessage(e: MessageEvent) {
       if (e.data?.type === 'preview-rendered') {
-        handlePreviewCapture();
+        if (!component?.preview_image) handlePreviewCapture();
       }
     }
     window.addEventListener('message', handleMessage);
@@ -148,23 +157,41 @@ export default function ComponentDetail() {
           <ArrowLeft className="w-5 h-5" />
           <span>返回画廊</span>
         </Link>
-        <button
-          onClick={handleDelete}
-          className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
-        >
-          <Trash2 className="w-4 h-4" />
-          <span>删除</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={toggleLayout}
+            className="flex items-center space-x-1.5 px-3 py-2 text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition-colors"
+            title={layout === 'side' ? '切换为上下布局' : '切换为左右布局'}
+          >
+            {layout === 'side' ? <Rows className="w-4 h-4" /> : <Columns className="w-4 h-4" />}
+            <span className="text-sm">{layout === 'side' ? '上下' : '左右'}</span>
+          </button>
+          <button
+            onClick={handleDelete}
+            className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>删除</span>
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* 左侧 — 预览 */}
+      <div className={cn(
+        'gap-8',
+        layout === 'side'
+          ? 'grid grid-cols-1 lg:grid-cols-2 items-start'
+          : 'flex flex-col'
+      )}>
+        {/* 左侧/上方 — 预览 */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl border border-zinc-200 overflow-hidden shadow-sm"
+          className={cn(
+            'bg-white rounded-2xl border border-zinc-200 overflow-hidden shadow-sm flex flex-col',
+            layout === 'side' && 'lg:sticky lg:top-8 lg:self-stretch'
+          )}
         >
-          <div className="px-4 py-3 border-b border-zinc-100 flex items-center justify-between">
+          <div className="px-4 py-3 border-b border-zinc-100 flex items-center justify-between shrink-0">
             <h3 className="font-medium text-zinc-700">预览</h3>
             {component.category_name && (
               <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
@@ -176,8 +203,10 @@ export default function ComponentDetail() {
             ref={iframeRef}
             srcDoc={previewHtml}
             title="组件预览"
-            className="w-full border-0"
-            style={{ height: 600 }}
+            className={cn(
+              'w-full border-0',
+              layout === 'side' ? 'flex-1 min-h-[500px]' : 'h-[500px]'
+            )}
             sandbox="allow-scripts allow-same-origin"
           />
         </motion.div>

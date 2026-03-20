@@ -54,8 +54,7 @@ export function buildPreviewHtml(
 <body>
   <div id="root"><div id="loading">加载预览中...</div></div>
   <div id="error-overlay"></div>
-  <link rel="stylesheet" href="https://registry.npmmirror.com/@unocss/reset/0.65.4/files/tailwind.min.css" />
-  <script src="https://registry.npmmirror.com/@unocss/runtime/0.65.4/files/uno.global.js"><\/script>
+  <script src="https://unpkg.com/@tailwindcss/browser@4"><\/script>
   <script src="https://registry.npmmirror.com/react/18.2.0/files/umd/react.production.min.js"><\/script>
   <script src="https://registry.npmmirror.com/react-dom/18.2.0/files/umd/react-dom.production.min.js"><\/script>
   <script src="https://registry.npmmirror.com/@babel/standalone/7.23.9/files/babel.min.js"><\/script>
@@ -85,7 +84,14 @@ export function buildPreviewHtml(
           filename: 'component.tsx'
         }).code;
         // 扫描编译后代码中大写开头的标识符，为未定义的生成 var 声明
-        var _skip = {'React':1,'ReactDOM':1,'Babel':1,'Object':1,'Array':1,'String':1,'Number':1,'Boolean':1,'Date':1,'Math':1,'JSON':1,'Promise':1,'Error':1,'TypeError':1,'RangeError':1,'Map':1,'Set':1,'WeakMap':1,'WeakSet':1,'Symbol':1,'Proxy':1,'Reflect':1,'RegExp':1,'Int8Array':1,'Uint8Array':1,'Float32Array':1,'Float64Array':1,'ArrayBuffer':1,'DataView':1,'URL':1,'URLSearchParams':1,'FormData':1,'Headers':1,'Request':1,'Response':1,'Event':1,'CustomEvent':1,'Node':1,'Element':1,'HTMLElement':1,'Document':1,'Window':1,'Navigator':1,'Infinity':1,'NaN':1,'SVGElement':1};
+        // 自动收集已声明的变量名，避免重复声明
+        var _skip = {'React':1,'ReactDOM':1,'Babel':1,'Object':1,'Array':1,'String':1,'Number':1,'Boolean':1,'Date':1,'Math':1,'JSON':1,'Promise':1,'Error':1,'TypeError':1,'RangeError':1,'Map':1,'Set':1,'WeakMap':1,'WeakSet':1,'Symbol':1,'Proxy':1,'Reflect':1,'RegExp':1,'Int8Array':1,'Uint8Array':1,'Float32Array':1,'Float64Array':1,'ArrayBuffer':1,'DataView':1,'URL':1,'URLSearchParams':1,'FormData':1,'Headers':1,'Request':1,'Response':1,'Event':1,'CustomEvent':1,'Node':1,'Element':1,'HTMLElement':1,'Document':1,'Window':1,'Navigator':1,'Infinity':1,'NaN':1,'SVGElement':1,'Fragment':1,'StrictMode':1,'Suspense':1};
+        // 也从编译后代码中提取已有的 const/let/var/function 声明
+        var _declMatches = output.match(/(?:const|let|var|function)\\s+([A-Z][A-Za-z0-9_]*)/g) || [];
+        for (var d = 0; d < _declMatches.length; d++) {
+          var dn = _declMatches[d].replace(/^(?:const|let|var|function)\\s+/, '');
+          _skip[dn] = 1;
+        }
         var _matches = output.match(/\\b([A-Z][A-Za-z0-9_]*)\\b/g) || [];
         var _seen = {};
         var _stubs = '';
@@ -102,7 +108,7 @@ export function buildPreviewHtml(
         document.body.appendChild(script);
         setTimeout(function() {
           window.parent.postMessage({ type: 'preview-rendered' }, '*');
-        }, 500);
+        }, 800);
       }
     } catch(e) {
       showError('组件渲染错误:\\n' + e.message);
