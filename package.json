@@ -1,0 +1,20 @@
+{
+  "name": "uiux-design",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "npm run dev -w server",
+    "dev:client": "npm run dev -w client",
+    "build": "npm run build -w client && npm run build -w server",
+    "start": "npm run start -w server",
+    "db:init": "npm run db:init -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
