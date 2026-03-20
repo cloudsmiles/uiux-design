@@ -92,6 +92,22 @@ export function buildPreviewHtml(
 }
 
 function buildComponentScript(code: string): string {
+  // 提取 import 中的命名导入，用于生成 stub
+  const importedNames: string[] = [];
+  const importRegex = /^import\s+\{([^}]+)\}\s+from\s+['"][^'"]+['"];?\s*$/gm;
+  let m: RegExpExecArray | null;
+  while ((m = importRegex.exec(code)) !== null) {
+    m[1].split(',').forEach(s => {
+      const name = s.trim().split(/\s+as\s+/).pop()?.trim();
+      if (name) importedNames.push(name);
+    });
+  }
+  // 也提取 default import
+  const defaultImportRegex = /^import\s+(\w+)\s+from\s+['"][^'"]+['"];?\s*$/gm;
+  while ((m = defaultImportRegex.exec(code)) !== null) {
+    importedNames.push(m[1]);
+  }
+
   let processed = code
     .replace(/^import\s+.*?from\s+['"][^'"]+['"];?\s*$/gm, '')
     .replace(/^import\s+['"][^'"]+['"];?\s*$/gm, '');
@@ -104,22 +120,36 @@ function buildComponentScript(code: string): string {
     .replace(/export\s+default\s+/g, '')
     .replace(/export\s+/g, '');
 
+  // React hooks 和内置变量不需要 stub
+  const builtins = new Set([
+    'useState', 'useEffect', 'useRef', 'useMemo', 'useCallback', 'Fragment',
+    'createContext', 'useContext', 'useReducer', 'forwardRef', 'memo', 'lazy',
+    'Suspense', 'StrictMode', 'createRoot', 'createPortal', 'React', 'ReactDOM',
+    'cn', 'motion',
+  ]);
+  const stubs = importedNames
+    .filter(n => !builtins.has(n))
+    .map(n => `if (typeof ${n} === 'undefined') var ${n} = _iconStub;`)
+    .join('\n');
+
   const helpers = `
 const { useState, useEffect, useRef, useMemo, useCallback, Fragment, createContext, useContext, useReducer, forwardRef, memo, lazy, Suspense, StrictMode } = React;
 const { createRoot } = ReactDOM;
 const { createPortal } = ReactDOM;
 const cn = (...args) => args.filter(Boolean).join(' ');
-const motion = { div: 'div', span: 'span', button: 'button', a: 'a', ul: 'ul', li: 'li', p: 'p', h1: 'h1', h2: 'h2', h3: 'h3', section: 'section', nav: 'nav', img: 'img', svg: 'svg', path: 'path' };
+const motion = new Proxy({}, { get: (_, tag) => tag });
+// 兜底：任何未定义的变量（如 lucide 图标）渲染为空 SVG 占位
+const _iconStub = (props) => React.createElement('svg', { width: props?.size || 24, height: props?.size || 24, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className: props?.className || '', style: props?.style });
 `;
 
   if (componentName) {
-    return `${helpers}\n${processed}\n\nReactDOM.createRoot(document.getElementById('root')).render(React.createElement(${componentName}));`;
+    return `${helpers}\n${stubs}\n${processed}\n\nReactDOM.createRoot(document.getElementById('root')).render(React.createElement(${componentName}));`;
   }
 
   const funcMatch = processed.match(/function\s+([A-Z]\w+)\s*[\(<]/);
   if (funcMatch) {
-    return `${helpers}\n${processed}\n\nReactDOM.createRoot(document.getElementById('root')).render(React.createElement(${funcMatch[1]}));`;
+    return `${helpers}\n${stubs}\n${processed}\n\nReactDOM.createRoot(document.getElementById('root')).render(React.createElement(${funcMatch[1]}));`;
   }
 
-  return `${helpers}\nfunction Preview() {\n  return React.createElement('div', {className: 'min-h-screen bg-zinc-100 flex items-center justify-center p-8'}, ${JSON.stringify(processed)});\n}\nReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Preview));`;
+  return `${helpers}\n${stubs}\nfunction Preview() {\n  return React.createElement('div', {className: 'min-h-screen bg-zinc-100 flex items-center justify-center p-8'}, ${JSON.stringify(processed)});\n}\nReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Preview));`;
 }
