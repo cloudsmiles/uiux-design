@@ -7,7 +7,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "db:init": "tsx src/db/init.ts"
+    "db:init": "tsx src/db/init.ts",
+    "test:cleanup": "tsx test/test-cleanup.ts"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
@@ -16,6 +17,7 @@
     "express": "^4.21.2",
     "multer": "^2.0.0",
     "mysql2": "^3.12.0",
+    "node-cron": "^4.2.1",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

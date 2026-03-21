@@ -8,6 +8,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 import express from 'express';
 import cors from 'cors';
 import componentsRouter from './routes/components.js';
+import { startCleanupScheduler } from './services/cleanupService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,4 +38,10 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  
+  // 启动清理服务
+  const uploadsDir = path.join(__dirname, '../uploads');
+  const schedule = process.env.CLEANUP_SCHEDULE || '0 2 * * *'; // 默认每天凌晨 2 点
+  const maxAgeHours = parseInt(process.env.CLEANUP_MAX_AGE_HOURS || '24', 10);
+  startCleanupScheduler(uploadsDir, schedule, maxAgeHours);
 });
