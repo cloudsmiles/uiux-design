@@ -41,7 +41,9 @@ export function buildPreviewHtml(
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: ui-sans-serif, system-ui, sans-serif; }
+    html, body { width: 100%; min-height: 100vh; }
+    body { font-family: ui-sans-serif, system-ui, sans-serif; display: flex; align-items: center; justify-content: center; }
+    #root { width: 100%; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
     #error-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85);
       color: #ff6b6b; padding: 20px; font-family: monospace; font-size: 14px;
       white-space: pre-wrap; overflow: auto; z-index: 9999; }
