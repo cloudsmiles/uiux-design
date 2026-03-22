@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Filter, Eye, Play } from 'lucide-react';
@@ -137,16 +137,54 @@ export default function Gallery() {
   );
 }
 
-/** 组件卡片 — 有截图直接展示，没有才 hover 加载 iframe */
+/** 组件卡片 — 有截图直接展示，没有才 hover 加载 iframe 并截图 */
 function ComponentCard({ component }: { component: Component }) {
   const hasPreview = !!component.preview_image;
   const [hovered, setHovered] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const capturedRef = useRef(false);
 
   // 只有没截图的组件才在 hover 时构建预览
   const previewHtml = useMemo(() => {
     if (hasPreview || !hovered) return '';
     return buildPreviewHtml(component.code, component.files);
   }, [hasPreview, hovered, component.code, component.files]);
+
+  // 监听 iframe 截图消息
+  const handlePreviewCapture = useCallback(async (dataUrl: string) => {
+    if (hasPreview || capturedRef.current) return;
+    capturedRef.current = true;
+    try {
+      if (dataUrl.length < 3_000_000) {
+        await api.savePreviewImage(component.id, dataUrl).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('Preview capture failed:', e);
+    }
+  }, [component.id, hasPreview]);
+
+  useEffect(() => {
+    if (hasPreview || !hovered) return;
+
+    function handleMessage(e: MessageEvent) {
+      if (e.data?.type === 'preview-rendered') {
+        // 渲染完成后请求截图
+        setTimeout(() => {
+          if (!capturedRef.current && iframeRef.current) {
+            try {
+              iframeRef.current.contentWindow?.postMessage({ type: 'capture-request' }, '*');
+            } catch { /* ignore */ }
+          }
+        }, 3000);
+      }
+      if (e.data?.type === 'preview-capture' && e.data.dataUrl) {
+        handlePreviewCapture(e.data.dataUrl);
+      }
+    }
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [hasPreview, hovered, handlePreviewCapture]);
 
   return (
     <motion.div
@@ -189,9 +227,10 @@ function ComponentCard({ component }: { component: Component }) {
         {!hasPreview && hovered && previewHtml && (
           <div className="absolute inset-0 z-10 overflow-hidden">
             <iframe
+              ref={iframeRef}
               srcDoc={previewHtml}
               title="预览"
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-same-origin"
               className="w-[300%] h-[300%] origin-top-left border-0 pointer-events-none"
               style={{ transform: 'scale(0.3333)' }}
             />

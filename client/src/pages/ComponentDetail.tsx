@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Copy, Check, Trash2, Columns, Rows } from 'lucide-react';
@@ -64,41 +64,6 @@ export default function ComponentDetail() {
     if (!component) return '';
     return buildPreviewHtml(component.code, component.files);
   }, [component]);
-
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const capturedRef = useRef(false);
-
-  // 监听 iframe 发来的截图数据并保存
-  const handlePreviewCapture = useCallback(async (dataUrl: string) => {
-    if (!component || component.preview_image || capturedRef.current) return;
-    capturedRef.current = true;
-    try {
-      if (dataUrl.length < 3_000_000) {
-        await api.savePreviewImage(component.id, dataUrl).catch(() => {});
-      }
-    } catch (e) {
-      console.warn('Preview capture failed:', e);
-    }
-  }, [component]);
-
-  useEffect(() => {
-    if (!component) return;
-    function handleMessage(e: MessageEvent) {
-      if (e.data?.type === 'preview-rendered') {
-        // 触发 iframe 内部截图
-        if (!component?.preview_image && !capturedRef.current && iframeRef.current) {
-          try {
-            iframeRef.current.contentWindow?.postMessage({ type: 'capture-request' }, '*');
-          } catch { /* ignore */ }
-        }
-      }
-      if (e.data?.type === 'preview-capture' && e.data.dataUrl) {
-        handlePreviewCapture(e.data.dataUrl);
-      }
-    }
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [component, handlePreviewCapture]);
 
   /* ---- 源代码文件列表（去重） ---- */
   const codeFileList = useMemo(() => {
@@ -166,21 +131,21 @@ export default function ComponentDetail() {
       </div>
 
       <div className={cn(
-        'gap-8',
+        'gap-6 lg:gap-8',
         layout === 'side'
-          ? 'grid grid-cols-1 lg:grid-cols-2 items-start'
+          ? 'grid grid-cols-1 lg:grid-cols-2'
           : 'flex flex-col'
       )}>
-        {/* 左侧/上方 — 预览 */}
+        {/* 预览 */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className={cn(
-            'bg-white rounded-2xl border border-zinc-200 overflow-hidden shadow-sm flex flex-col',
-            layout === 'side' && 'lg:sticky lg:top-8 lg:self-stretch'
+            'bg-white rounded-2xl border border-zinc-200 overflow-hidden shadow-sm',
+            layout === 'side' && 'lg:sticky lg:top-4'
           )}
         >
-          <div className="px-4 py-3 border-b border-zinc-100 flex items-center justify-between shrink-0">
+          <div className="px-4 py-3 border-b border-zinc-100 flex items-center justify-between">
             <h3 className="font-medium text-zinc-700">预览</h3>
             {component.category_name && (
               <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
@@ -189,13 +154,10 @@ export default function ComponentDetail() {
             )}
           </div>
           <iframe
-            ref={iframeRef}
             srcDoc={previewHtml}
             title="组件预览"
-            className={cn(
-              'w-full border-0',
-              layout === 'side' ? 'flex-1 min-h-[500px]' : 'h-[500px]'
-            )}
+            className="w-full border-0"
+            style={{ height: layout === 'stack' ? 600 : 700 }}
             sandbox="allow-scripts"
           />
         </motion.div>
@@ -231,17 +193,25 @@ export default function ComponentDetail() {
 }
 
 /** 只读代码展示，带语法高亮和多文件 tab */
+function getLanguage(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  if (ext === 'css') return 'css';
+  if (ext === 'html' || ext === 'htm') return 'xml';
+  return 'typescript';
+}
+
 function CodeViewer({ files }: { files: { name: string; code: string }[] }) {
   const [activeTab, setActiveTab] = useState(0);
   const [copied, setCopied] = useState(false);
-  const codeRef = useRef<HTMLElement>(null);
   const activeFile = files[activeTab] || files[0];
 
-  // 语法高亮
-  useEffect(() => {
-    if (codeRef.current) {
-      codeRef.current.removeAttribute('data-highlighted');
-      hljs.highlightElement(codeRef.current);
+  const highlightedCode = useMemo(() => {
+    if (!activeFile?.code) return '';
+    const lang = getLanguage(activeFile.name);
+    try {
+      return hljs.highlight(activeFile.code, { language: lang }).value;
+    } catch {
+      return activeFile.code;
     }
   }, [activeFile]);
 
@@ -287,11 +257,9 @@ function CodeViewer({ files }: { files: { name: string; code: string }[] }) {
       <div className="overflow-auto max-h-[600px] bg-[#0d1117]">
         <pre className="p-4 text-sm leading-relaxed">
           <code
-            ref={codeRef}
-            className="language-typescript"
-          >
-            {activeFile?.code || ''}
-          </code>
+            className={`hljs language-${getLanguage(activeFile?.name || '')}`}
+            dangerouslySetInnerHTML={{ __html: highlightedCode }}
+          />
         </pre>
       </div>
     </div>

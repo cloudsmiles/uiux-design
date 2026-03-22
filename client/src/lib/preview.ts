@@ -1,11 +1,17 @@
 /**
  * 构建可在 iframe 中直接渲染的 HTML。
  * 使用 Tailwind CDN + Babel Standalone + React UMD，纯本地渲染。
+ * 如果代码是纯 HTML，则直接渲染，不走 React 路径。
  */
 export function buildPreviewHtml(
   code: string,
   files?: Record<string, string> | null,
 ): string {
+  // 检测是否为纯 HTML 代码
+  if (isHtmlCode(code, files)) {
+    return buildHtmlPreview(code, files);
+  }
+
   let cssCode = '';
   let jsCode = code;
 
@@ -40,10 +46,10 @@ export function buildPreviewHtml(
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; min-height: 100vh; }
-    body { font-family: ui-sans-serif, system-ui, sans-serif; display: flex; align-items: center; justify-content: center; }
-    #root { width: 100%; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; width: 100%; min-height: 100%; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; background: #fff; }
+    #root { width: 100%; min-height: 100%; }
     #error-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85);
       color: #ff6b6b; padding: 20px; font-family: monospace; font-size: 14px;
       white-space: pre-wrap; overflow: auto; z-index: 9999; }
@@ -56,7 +62,7 @@ export function buildPreviewHtml(
 <body>
   <div id="root"><div id="loading">加载预览中...</div></div>
   <div id="error-overlay"></div>
-  <script src="https://s4.zstatic.net/npm/@tailwindcss/browser@4.2.2/dist/index.global.js"><\/script>
+  <script src="https://cdn.tailwindcss.com"><\/script>
   <script>
     // CDN fallback 加载器
     function loadScript(urls, cb) {
@@ -158,32 +164,53 @@ export function buildPreviewHtml(
         // 监听父窗口的截图请求
         window.addEventListener('message', function(e) {
           if (e.data && e.data.type === 'capture-request') {
-            setTimeout(function() {
-              try {
-                var root = document.getElementById('root');
-                if (!root) return;
-                var rect = root.getBoundingClientRect();
-                var w = Math.min(rect.width || document.documentElement.scrollWidth, 1200);
-                var h = Math.min(rect.height || document.documentElement.scrollHeight, 800);
-                var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
-                  '<foreignObject width="100%" height="100%">' +
-                  new XMLSerializer().serializeToString(document.documentElement) +
-                  '</foreignObject></svg>';
-                var img = new Image();
-                img.onload = function() {
-                  var canvas = document.createElement('canvas');
-                  canvas.width = w * 2;
-                  canvas.height = h * 2;
-                  var ctx = canvas.getContext('2d');
-                  ctx.scale(2, 2);
-                  ctx.drawImage(img, 0, 0);
-                  var dataUrl = canvas.toDataURL('image/webp', 0.85);
-                  window.parent.postMessage({ type: 'preview-capture', dataUrl: dataUrl }, '*');
-                };
-                img.onerror = function() {};
-                img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-              } catch(err) { console.warn('Capture error:', err); }
-            }, 1000);
+            // 动态加载 html2canvas
+            if (typeof html2canvas === 'undefined') {
+              var s = document.createElement('script');
+              s.src = 'https://registry.npmmirror.com/html2canvas/1.4.1/files/dist/html2canvas.min.js';
+              s.onload = function() { doCapture(); };
+              s.onerror = function() {
+                var s2 = document.createElement('script');
+                s2.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+                s2.onload = function() { doCapture(); };
+                s2.onerror = function() { console.warn('html2canvas 加载失败'); };
+                document.head.appendChild(s2);
+              };
+              document.head.appendChild(s);
+            } else {
+              doCapture();
+            }
+            function doCapture() {
+              setTimeout(function() {
+                try {
+                  var root = document.getElementById('root');
+                  if (!root) return;
+                  html2canvas(root, {
+                    scale: 2,
+                    useCORS: false,
+                    allowTaint: true,
+                    backgroundColor: '#ffffff',
+                    logging: false,
+                    width: Math.min(root.scrollWidth || 800, 1200),
+                    height: Math.min(root.scrollHeight || 600, 800),
+                    onclone: function(clonedDoc) {
+                      var imgs = clonedDoc.querySelectorAll('img');
+                      imgs.forEach(function(img) {
+                        if (img.crossOrigin || (img.src && img.src.indexOf('http') === 0)) {
+                          img.style.background = '#e5e7eb';
+                          img.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="%23e5e7eb" width="100" height="100"/><text x="50" y="50" text-anchor="middle" dy=".3em" fill="%239ca3af" font-size="12">图片</text></svg>');
+                        }
+                      });
+                    }
+                  }).then(function(canvas) {
+                    var dataUrl = canvas.toDataURL('image/webp', 0.85);
+                    window.parent.postMessage({ type: 'preview-capture', dataUrl: dataUrl }, '*');
+                  }).catch(function(err) {
+                    console.warn('Capture error:', err);
+                  });
+                } catch(err) { console.warn('Capture error:', err); }
+              }, 500);
+            }
           }
         });
       }
@@ -228,4 +255,164 @@ const motion = new Proxy({}, { get: (_, tag) => tag });
   }
 
   return `${helpers}\nfunction Preview() {\n  return React.createElement('div', {className: 'min-h-screen bg-zinc-100 flex items-center justify-center p-8'}, ${JSON.stringify(processed)});\n}\nReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Preview));`;
+}
+
+
+/**
+ * 检测代码是否为纯 HTML（而非 React/JSX 组件）
+ */
+function isHtmlCode(code: string, files?: Record<string, string> | null): boolean {
+  const trimmed = code.trim();
+  // 以 <!DOCTYPE 或 <html 开头的是纯 HTML
+  if (/^<!doctype\s+html/i.test(trimmed) || /^<html[\s>]/i.test(trimmed)) return true;
+  // 文件列表中有 .html 文件
+  if (files) {
+    for (const name of Object.keys(files)) {
+      if (name.endsWith('.html') || name.endsWith('.htm')) return true;
+    }
+  }
+  // 包含典型 HTML 标签但没有 React 特征
+  const hasHtmlTags = /<(?:div|section|header|footer|main|article|nav|body|head|meta|link)\b/i.test(trimmed);
+  const hasReactFeatures = /(?:import\s+.*(?:react|React)|export\s+default\s+function|useState|useEffect|React\.createElement|createRoot)\b/.test(trimmed);
+  if (hasHtmlTags && !hasReactFeatures && !trimmed.startsWith('import ')) return true;
+  return false;
+}
+
+/**
+ * 为纯 HTML 代码构建预览，直接渲染，不走 React/Babel
+ */
+function buildHtmlPreview(code: string, files?: Record<string, string> | null): string {
+  let htmlContent = code;
+  let cssCode = '';
+  let jsCode = '';
+
+  // 如果有多文件，合并 HTML/CSS/JS
+  if (files && Object.keys(files).length > 0) {
+    let htmlParts: string[] = [];
+    for (const [name, content] of Object.entries(files)) {
+      if (name.endsWith('.css')) {
+        cssCode += content + '\n';
+      } else if (name.endsWith('.js')) {
+        jsCode += content + '\n';
+      } else if (name.endsWith('.html') || name.endsWith('.htm')) {
+        htmlParts.push(content);
+      }
+    }
+    if (htmlParts.length > 0) {
+      htmlContent = htmlParts.join('\n');
+    }
+  }
+
+  const trimmed = htmlContent.trim();
+
+  // 如果已经是完整 HTML 文档，注入 Tailwind 和额外的 CSS/JS
+  if (/^<!doctype\s+html/i.test(trimmed) || /^<html[\s>]/i.test(trimmed)) {
+    let result = trimmed;
+    // 在 </head> 前注入 Tailwind 和 CSS
+    const inject = `<script src="https://s4.zstatic.net/npm/@tailwindcss/browser@4.2.2/dist/index.global.js"><\/script>\n`
+      + (cssCode ? `<style>${cssCode}</style>\n` : '');
+    if (result.includes('</head>')) {
+      result = result.replace('</head>', inject + '</head>');
+    } else if (result.includes('<body')) {
+      result = result.replace('<body', inject + '<body');
+    }
+    // 在 </body> 前注入 JS
+    if (jsCode) {
+      if (result.includes('</body>')) {
+        result = result.replace('</body>', `<script>${jsCode}<\/script>\n</body>`);
+      } else {
+        result += `<script>${jsCode}<\/script>`;
+      }
+    }
+    // 注入截图和消息通信脚本
+    const captureScript = buildCaptureScript();
+    if (result.includes('</body>')) {
+      result = result.replace('</body>', captureScript + '\n</body>');
+    } else {
+      result += captureScript;
+    }
+    return result;
+  }
+
+  // 不是完整 HTML 文档，包装成完整页面
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"><\/script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; width: 100%; min-height: 100%; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; background: #fff; }
+    ${cssCode}
+  </style>
+</head>
+<body>
+  ${htmlContent}
+  ${jsCode ? `<script>${jsCode}<\/script>` : ''}
+  ${buildCaptureScript()}
+</body>
+</html>`;
+}
+
+/**
+ * 生成截图通信脚本（HTML 预览和 React 预览共用）
+ * 使用 html2canvas 库实现截图
+ */
+function buildCaptureScript(): string {
+  return `<script>
+    setTimeout(function() {
+      window.parent.postMessage({ type: 'preview-rendered' }, '*');
+    }, 800);
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'capture-request') {
+        if (typeof html2canvas === 'undefined') {
+          var s = document.createElement('script');
+          s.src = 'https://registry.npmmirror.com/html2canvas/1.4.1/files/dist/html2canvas.min.js';
+          s.onload = function() { doCapture(); };
+          s.onerror = function() {
+            var s2 = document.createElement('script');
+            s2.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+            s2.onload = function() { doCapture(); };
+            s2.onerror = function() { console.warn('html2canvas 加载失败'); };
+            document.head.appendChild(s2);
+          };
+          document.head.appendChild(s);
+        } else {
+          doCapture();
+        }
+        function doCapture() {
+          setTimeout(function() {
+            try {
+              var root = document.body;
+              html2canvas(root, {
+                scale: 2,
+                useCORS: false,
+                allowTaint: true,
+                backgroundColor: '#ffffff',
+                logging: false,
+                width: Math.min(root.scrollWidth || 800, 1200),
+                height: Math.min(root.scrollHeight || 600, 800),
+                onclone: function(clonedDoc) {
+                  var imgs = clonedDoc.querySelectorAll('img');
+                  imgs.forEach(function(img) {
+                    if (img.crossOrigin || (img.src && img.src.indexOf('http') === 0)) {
+                      img.style.background = '#e5e7eb';
+                      img.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="%23e5e7eb" width="100" height="100"/><text x="50" y="50" text-anchor="middle" dy=".3em" fill="%239ca3af" font-size="12">图片</text></svg>');
+                    }
+                  });
+                }
+              }).then(function(canvas) {
+                var dataUrl = canvas.toDataURL('image/webp', 0.85);
+                window.parent.postMessage({ type: 'preview-capture', dataUrl: dataUrl }, '*');
+              }).catch(function(err) {
+                console.warn('Capture error:', err);
+              });
+            } catch(err) { console.warn('Capture error:', err); }
+          }, 500);
+        }
+      }
+    });
+  <\/script>`;
 }

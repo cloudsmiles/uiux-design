@@ -170,11 +170,16 @@ iframe 使用 `sandbox="allow-scripts"` 属性，仅允许脚本执行：
 
 ## Tailwind CSS 支持
 
-预览环境使用 Tailwind CSS 4 CDN 版本：
+预览环境使用 Tailwind Play CDN（Tailwind CSS 3），支持 JIT 动态编译：
 
 ```html
-<script src="https://s4.zstatic.net/npm/@tailwindcss/browser@4.2.2/dist/index.global.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
 ```
+
+Play CDN 的优势：
+- **JIT 动态编译**：通过 MutationObserver 实时检测 DOM 中的类名，按需生成 CSS
+- **完整功能支持**：支持所有 Tailwind 工具类，包括任意值（如 `w-[123px]`）
+- **响应式和状态变体**：`hover:`、`dark:`、`sm:` 等变体都能正常工作
 
 用户代码中的 Tailwind 类名可直接生效，无需额外配置。
 
