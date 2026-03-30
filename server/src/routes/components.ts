@@ -198,7 +198,6 @@ router.post('/components/upload', upload.single('file'), async (req: Request, re
     res.status(201).json({
       success: true,
       data: {
-        isAIStudio: result.isAIStudio,
         projectName: result.projectName,
         count: ids.length,
         ids,

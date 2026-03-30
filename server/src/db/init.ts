@@ -72,6 +72,14 @@ async function initDatabase() {
     // 忽略错误
   }
 
+  // 添加 is_ai_studio 字段
+  try {
+    await connection.query(`ALTER TABLE components ADD COLUMN is_ai_studio BOOLEAN DEFAULT FALSE`);
+    console.log('Added "is_ai_studio" column to components table');
+  } catch {
+    // 字段已存在，忽略错误
+  }
+
   // 插入默认分类
   const defaultCategories = [
     { name: '按钮', icon: 'MousePointer', sort_order: 1 },

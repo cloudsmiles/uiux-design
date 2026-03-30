@@ -1,20 +1,95 @@
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
-interface ApiResponse<T> {
+/**
+ * API 错误类型 (P11)
+ */
+export interface ApiError {
+  code: string;
+  message: string;
+  status: number;
+  details?: unknown;
+}
+
+/**
+ * API 响应类型
+ */
+export interface ApiResponse<T> {
   success: boolean;
   data?: T;
   message?: string;
+  error?: ApiError;
 }
 
+/**
+ * 统一的请求函数，包含错误处理 (P11)
+ */
 async function request<T>(path: string, options?: RequestInit): Promise<ApiResponse<T>> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-    ...options,
-  });
-  return response.json();
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 秒超时
+
+    const response = await fetch(`${API_BASE}${path}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      },
+      signal: controller.signal,
+      ...options,
+    });
+
+    clearTimeout(timeoutId);
+
+    // 检查 HTTP 状态码
+    if (!response.ok) {
+      const error: ApiError = {
+        code: 'HTTP_ERROR',
+        message: `HTTP ${response.status}: ${response.statusText}`,
+        status: response.status,
+      };
+
+      // 尝试解析错误响应体
+      try {
+        const body = await response.json();
+        error.message = body.message || body.error || error.message;
+        error.details = body;
+      } catch {
+        // 忽略解析错误
+      }
+
+      return {
+        success: false,
+        message: error.message,
+        error,
+      };
+    }
+
+    // 解析响应
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    // 网络错误或超时处理
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        return {
+          success: false,
+          message: '请求超时，请检查网络连接',
+          error: { code: 'TIMEOUT', message: '请求超时', status: 0 },
+        };
+      }
+
+      return {
+        success: false,
+        message: error.message || '网络请求失败',
+        error: { code: 'NETWORK_ERROR', message: error.message, status: 0 },
+      };
+    }
+
+    return {
+      success: false,
+      message: '未知错误',
+      error: { code: 'UNKNOWN', message: '未知错误', status: 0 },
+    };
+  }
 }
 
 // 类型定义
@@ -48,7 +123,6 @@ export interface ComponentsResponse {
 }
 
 export interface UploadResult {
-  isAIStudio: boolean;
   projectName: string;
   count: number;
   ids: string[];

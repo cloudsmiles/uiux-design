@@ -62,7 +62,7 @@ export default function ComponentDetail() {
   /* ---- 预览 HTML ---- */
   const previewHtml = useMemo(() => {
     if (!component) return '';
-    return buildPreviewHtml(component.code, component.files);
+    return buildPreviewHtml(component.code, component.files, component.dependencies);
   }, [component]);
 
   /* ---- 源代码文件列表（去重） ---- */

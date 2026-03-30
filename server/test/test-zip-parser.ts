@@ -29,8 +29,7 @@ for (const file of testFiles) {
   try {
     const result = parseZipFile(zipPath);
 
-    console.log(`\n是否为 AI Studio 项目: ${result.isAIStudio}`);
-    console.log(`项目名称: ${result.projectName}`);
+    console.log(`\n项目名称: ${result.projectName}`);
     console.log(`发现组件数量: ${result.components.length}`);
     console.log(`依赖数量: ${Object.keys(result.dependencies).length}`);
 

@@ -73,7 +73,6 @@ async function testUpload(zipPath: string, label: string) {
   console.log('\n[1] 解析 ZIP 文件...');
   const result = parseZipFile(zipPath);
 
-  console.log(`    是否为 AI Studio 项目: ${result.isAIStudio}`);
   console.log(`    项目名称: ${result.projectName}`);
   console.log(`    发现组件: ${result.components.length} 个`);
 

@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "WebSearch",
+      "Bash(curl:*)",
+      "Bash(lsof:*)",
+      "Bash(npx tsc:*)",
+      "Bash(source:*)",
+      "Bash(mysql:*)"
     ]
   }
 }

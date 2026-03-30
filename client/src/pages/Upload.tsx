@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Upload, Code, FileArchive, Check, Sparkles, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Upload, Code, FileArchive, Check, ChevronDown } from 'lucide-react';
 import { api, type Category, type UploadResult } from '../lib/api';
 import { cn } from '../lib/utils';
 
@@ -48,7 +48,6 @@ export default function UploadPage() {
         });
         if (res.success) {
           setResult({
-            isAIStudio: false,
             projectName: name,
             count: 1,
             ids: [res.data!.id],
@@ -158,15 +157,11 @@ export default function UploadPage() {
             >
               <div className="flex items-start space-x-3">
                 <div className="flex-shrink-0">
-                  {result.isAIStudio ? (
-                    <Sparkles className="w-5 h-5 text-green-600" />
-                  ) : (
-                    <Check className="w-5 h-5 text-green-600" />
-                  )}
+                  <Check className="w-5 h-5 text-green-600" />
                 </div>
                 <div className="flex-1">
                   <h3 className="text-sm font-medium text-green-800">
-                    {result.isAIStudio ? `AI Studio 项目「${result.projectName}」` : '组件'}上传成功！
+                    组件上传成功！
                   </h3>
                   <p className="text-sm text-green-700 mt-1">
                     共导入 {result.count} 个组件

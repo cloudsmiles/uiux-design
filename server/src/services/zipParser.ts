@@ -17,8 +17,8 @@ export function parseZipFile(zipPath: string): ParsedZipResult {
     }
   }
 
-  // 检测是否为 AI Studio 项目
-  const isAIStudio = files.has('metadata.json') ||
+  // 检测是否包含 metadata.json（用于解析策略选择）
+  const hasMetadata = files.has('metadata.json') ||
                      hasFileMatching(files, 'src/data/components.');
 
   // 解析 metadata.json
@@ -51,8 +51,8 @@ export function parseZipFile(zipPath: string): ParsedZipResult {
   // 解析组件
   let components: CreateComponentInput[] = [];
 
-  if (isAIStudio) {
-    // AI Studio 项目解析流程
+  if (hasMetadata) {
+    // 包含 metadata.json 的项目解析流程
     // 1. 优先从 src/data/components.tsx 提取（多组件集合格式）
     const componentsFile = findFile(files, 'src/data/components.');
     if (componentsFile) {
@@ -69,7 +69,7 @@ export function parseZipFile(zipPath: string): ParsedZipResult {
         description: projectDescription,
         code: files.get('src/App.tsx')!,
         files: sourceFiles,
-        tags: ['AI Studio'],
+        tags: [],
       });
     }
 
@@ -77,7 +77,6 @@ export function parseZipFile(zipPath: string): ParsedZipResult {
     components = components.map(comp => ({
       ...comp,
       description: comp.description || projectDescription,
-      tags: [...new Set([...(comp.tags || []), 'AI Studio'])],
     }));
   } else {
     // 普通组件包 - 查找主要组件文件
@@ -88,7 +87,6 @@ export function parseZipFile(zipPath: string): ParsedZipResult {
   }
 
   return {
-    isAIStudio,
     projectName,
     components,
     dependencies,

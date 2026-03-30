@@ -33,18 +33,8 @@ export interface CreateComponentInput {
   preview_image?: string | null;
 }
 
-// AI Studio 组件结构
-export interface AIStudioComponent {
-  id: string;
-  name: string;
-  category: string;
-  description: string;
-  code: string;
-}
-
 // ZIP 解析结果
 export interface ParsedZipResult {
-  isAIStudio: boolean;
   projectName: string;
   components: CreateComponentInput[];
   dependencies: Record<string, string>;

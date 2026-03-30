@@ -75,8 +75,8 @@ export async function getComponentById(id: string): Promise<Component | null> {
 export async function createComponent(input: CreateComponentInput): Promise<string> {
   const id = uuidv4();
   await pool.query(
-    `INSERT INTO components (id, name, category_id, description, code, files, dependencies, tags)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO components (id, name, category_id, description, code, files, dependencies, tags, is_ai_studio)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.name,
@@ -86,6 +86,7 @@ export async function createComponent(input: CreateComponentInput): Promise<stri
       JSON.stringify(input.files || {}),
       JSON.stringify(input.dependencies || {}),
       JSON.stringify(input.tags || []),
+      input.is_ai_studio ? 1 : 0,
     ]
   );
   return id;
@@ -95,29 +96,39 @@ export async function createComponentsBatch(inputs: CreateComponentInput[]): Pro
   if (inputs.length === 0) return [];
 
   const ids: string[] = [];
+  const values: (string | number | null)[][] = [];
+
+  // P14: 准备批量插入的数据
+  for (const input of inputs) {
+    const id = uuidv4();
+    ids.push(id);
+    values.push([
+      id,
+      input.name,
+      input.category_id || null,
+      input.description || null,
+      input.code,
+      JSON.stringify(input.files || {}),
+      JSON.stringify(input.dependencies || {}),
+      input.preview_image || null,
+      JSON.stringify(input.tags || []),
+      input.is_ai_studio ? 1 : 0,
+    ]);
+  }
+
   const conn = await pool.getConnection();
 
   try {
     await conn.beginTransaction();
 
-    for (const input of inputs) {
-      const id = uuidv4();
-      await conn.query(
-        `INSERT INTO components (id, name, category_id, description, code, files, dependencies, tags)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          id,
-          input.name,
-          input.category_id || null,
-          input.description || null,
-          input.code,
-          JSON.stringify(input.files || {}),
-          JSON.stringify(input.dependencies || {}),
-          JSON.stringify(input.tags || []),
-        ]
-      );
-      ids.push(id);
-    }
+    // P14: 使用批量 INSERT 代替循环单条插入
+    const placeholders = values.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+    const sql = `
+      INSERT INTO components (id, name, category_id, description, code, files, dependencies, preview_image, tags, is_ai_studio)
+      VALUES ${placeholders}
+    `;
+
+    await conn.query(sql, values.flat());
 
     await conn.commit();
   } catch (error) {
